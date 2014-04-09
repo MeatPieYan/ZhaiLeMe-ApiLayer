@@ -4,55 +4,55 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.UUID;
 
+import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.Id;
+import javax.persistence.Table;
 
-import play.db.ebean.Model;
+import play.db.ebean.Model.Finder;
 
-import com.sun.corba.se.spi.ior.ObjectId;
+import com.avaje.ebean.Ebean;
 
 /**
- * Created with IntelliJ IDEA.
- * User: Brian
- * Date: 17-10-13
- * Time: 18:20
- *
  * An Auth Token.
  * Auth tokens are stored in their own collection.
  * A user can have multiple auth tokens, for each time he logs in on a certain device.
  * Each token has a lifetime of 30 days, or will be deleted when the user logs out on that device.
  */
 @Entity
+@Table(name="auth_token")
 public class AuthToken{
-
 	@Id
-    ObjectId id;
-
-    @Indexed(unique = true, dropDups = true)
-    protected String token;
-
-    @Reference
-    protected User user;
-	
-    private String ip;
+    public Long id;
+	public String token;
+	@Column(name="uid")
+	public Long userId;
+	public String ip;
+	@Column(name="created")
+	public Date createdOn;
+	@Column(name="expires")
+	public Date expiresOn;
 
     public AuthToken(){
-    	super();
+    	Calendar cal = Calendar.getInstance();
+        cal.add(Calendar.DATE, 1);
+        this.createdOn = new Date();
+        this.expiresOn = cal.getTime();
     }
     
-    public AuthToken(String ip, User user) {
+    public AuthToken(String ip, Long userId) {
         this.token = UUID.randomUUID().toString();
         Calendar cal = Calendar.getInstance();
         cal.add(Calendar.DATE, 30);
         this.createdOn = new Date();
         this.expiresOn = cal.getTime();
         this.ip = ip;
-        this.user = user;
+        this.userId = userId;
     }
 
-    public static Model.Finder<ObjectId, AuthToken> find(){
-        return new Model.Finder<ObjectId, AuthToken>(ObjectId.class, AuthToken.class);
-    }
+    public static Finder<Long, AuthToken> find = new Finder<Long, AuthToken>(
+    	Long.class, AuthToken.class
+    ); 
 
     /**
      * Find an Auth token by the token string.
@@ -66,8 +66,10 @@ public class AuthToken{
         }
 
         try  {
-            AuthToken tok = AuthToken.find().filter("token", authToken).get();
-
+            AuthToken tok = Ebean.find(AuthToken.class)
+            		.where().eq("token", authToken)
+            		.findUnique();
+            
             if(tok != null){
                 return tok;
             } else {
@@ -79,19 +81,4 @@ public class AuthToken{
         }
     }
 
-    public String getToken() {
-        return token;
-    }
-
-    public void setToken(String token) {
-        this.token = token;
-    }
-    
-    public User getUser() {
-        return user;
-    }
-
-    public void setUser(User user) {
-        this.user = user;
-    }
 }

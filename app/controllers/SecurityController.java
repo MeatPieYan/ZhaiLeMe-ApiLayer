@@ -5,24 +5,20 @@ import static play.mvc.Controller.response;
 import models.AuthToken;
 import models.User;
 import models.WrongLogin;
-
-import org.eclipse.jetty.util.log.Log;
-
 import play.data.Form;
 import play.data.validation.Constraints;
+import play.libs.F;
 import play.libs.Json;
 import play.mvc.Action;
 import play.mvc.Http;
 import play.mvc.Result;
+import play.mvc.SimpleResult;
 import play.mvc.With;
 
+import com.avaje.ebean.Ebean;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**
- * Created with IntelliJ IDEA.
- * User: Brian
- * Date: 17-10-13
- * Time: 18:20
  * The security controller is used for (preserving) user authentication.
  */
 public class SecurityController extends Action.Simple {
@@ -37,7 +33,7 @@ public class SecurityController extends Action.Simple {
      * @return The output of the original call, or unauthorized if authentication fails.
      * @throws Throwable
      */
-    public Result call(Http.Context ctx) throws Throwable {
+    public F.Promise<SimpleResult> call(Http.Context ctx) throws Throwable {
 
         String[] authTokenHeaderValues = ctx.request().headers().get(AUTH_TOKEN_HEADER);
 
@@ -45,15 +41,15 @@ public class SecurityController extends Action.Simple {
 
             AuthToken token = AuthToken.findByAuthToken(authTokenHeaderValues[0]);
             if(token != null){
-                User user = token.getUser();
+                User user = User.find.byId(token.userId);
                 if (user != null) {
                     ctx.args.put("user", user);
                     return delegate.call(ctx);
                 }
             }
         }
-
-        return unauthorized("unauthorized");
+		return null;
+//        return unauthorized("unauthorized");
     }
 
     /**
@@ -93,10 +89,10 @@ public class SecurityController extends Action.Simple {
             // Record the failed login
             if(alreadyWrong != null){
                 alreadyWrong.attempts++;
-                alreadyWrong.update();
+                Ebean.save(alreadyWrong);
             } else {
                 alreadyWrong = new WrongLogin(clientIp, "login");
-                alreadyWrong.insert();
+                Ebean.save(alreadyWrong);
             }
 
             return unauthorized();
@@ -106,17 +102,17 @@ public class SecurityController extends Action.Simple {
             user.setLastLogin();
 
             // Log the login
-            Log log = new Log(user, "user_login");
-            log.insert();
+//            Log log = new Log(user, "user_login");
+//            log.insert();
 
             // create a new token
-            AuthToken token = new AuthToken(clientIp, user);
-            token.insert();
+            AuthToken token = new AuthToken(clientIp, user.uid);
+            Ebean.save(token);
 
             // Set the cookie, jsonify and return
             ObjectNode authTokenJson = Json.newObject();
-            authTokenJson.put(AUTH_TOKEN, token.getToken());
-            response().setCookie(AUTH_TOKEN, token.getToken());
+            authTokenJson.put(AUTH_TOKEN, token.token);
+            response().setCookie(AUTH_TOKEN, token.token);
             return ok(authTokenJson);
         }
     }
@@ -129,7 +125,7 @@ public class SecurityController extends Action.Simple {
     public static Result logout() {
         response().discardCookie(AUTH_TOKEN);
         AuthToken token = AuthToken.findByAuthToken(response().getHeaders().get(AUTH_TOKEN_HEADER));
-        token.delete();
+        Ebean.delete(token);
         return redirect("/");
     }
 
